@@ -1,209 +1,175 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, ActivityIndicator } from 'react-native';
+import React from 'react';
+import { 
+  View, 
+  Text, 
+  StyleSheet, 
+  ScrollView, 
+  FlatList, 
+  TouchableOpacity, 
+  StatusBar
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import * as DocumentPicker from 'expo-document-picker';
-import axios from 'axios';
-import { API_URL } from '../../constants/Config';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-export default function LibraryTab() {
-  const [activeTab, setActiveTab] = useState<'books' | 'videos'>('books');
-  const [title, setTitle] = useState('');
-  const [link, setLink] = useState(''); 
-  const [selectedFile, setSelectedFile] = useState<any>(null);
-  const [loading, setLoading] = useState(false);
-  const [items, setItems] = useState<any[]>([]);
+// Données adaptées pour le Primaire et Secondaire
+const RAYONS_SCOLAIRES = [
+  {
+    id: '1',
+    classe: '6ème Primaire (TENAFEP)',
+    matiere: 'Tronc Commun',
+    livres: [
+      { id: 'p1', title: 'Calcul Mental', color: '#e11d48', icon: 'calculator', type: 'Manuel' },
+      { id: 'p2', title: 'Grammaire Française', color: '#2563eb', icon: 'text', type: 'Exercices' },
+      { id: 'p3', title: 'Sciences de la Vie', color: '#16a34a', icon: 'leaf', type: 'Cours' },
+    ]
+  },
+  {
+    id: '2',
+    classe: '1ère & 2ème Secondaire',
+    matiere: 'Sciences & Lettres',
+    livres: [
+      { id: 's1', title: 'Algèbre I', color: '#7c3aed', icon: 'infinite', type: 'Livre' },
+      { id: 's2', title: 'Histoire du Congo', color: '#d97706', icon: 'map', type: 'Manuel' },
+      { id: 's3', title: 'Physique : Optique', color: '#0891b2', icon: 'sunny', type: 'TP' },
+    ]
+  },
+  {
+    id: '3',
+    classe: 'Humanités (3ème - 6ème)',
+    matiere: 'Option Math-Physique / Littéraire',
+    livres: [
+      { id: 'h1', title: 'Philosophie', color: '#4f46e5', icon: 'bulb', type: 'Cours' },
+      { id: 'h2', title: 'Chimie Organique', color: '#be185d', icon: 'flask', type: 'Manuel' },
+    ]
+  }
+];
 
-  // Récupération des données depuis l'API
-  const fetchLibrary = async () => {
-    try {
-      const token = await AsyncStorage.getItem('userToken');
-      const res = await axios.get(`${API_URL}/library?type=${activeTab}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      setItems(Array.isArray(res.data) ? res.data : []);
-    } catch (error) {
-      console.error("Erreur de chargement bibliothèque:", error);
-    }
-  };
+export default function LibraryScreen() {
+  const insets = useSafeAreaInsets();
 
-  useEffect(() => {
-    fetchLibrary();
-  }, [activeTab]);
-
-  const pickDocument = async () => {
-    let result = await DocumentPicker.getDocumentAsync({
-      type: 'application/pdf',
-      copyToCacheDirectory: true,
-    });
-    
-    if (!result.canceled) {
-      setSelectedFile(result.assets[0]);
-    }
-  };
-
-  const handleUpload = async () => {
-    if (!title || (activeTab === 'books' && !selectedFile) || (activeTab === 'videos' && !link)) {
-      Alert.alert("Erreur", "Veuillez remplir tous les champs");
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const token = await AsyncStorage.getItem('userToken');
-      const data = new FormData();
-      data.append('title', title);
-      data.append('type', activeTab);
-
-      if (activeTab === 'books') {
-         data.append('file', {
-            uri: selectedFile.uri,
-            name: selectedFile.name,
-            type: 'application/pdf',
-         } as any);
-      } else {
-        data.append('url', link);
-      }
-
-      await axios.post(`${API_URL}/library`, data, {
-        headers: { 
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'multipart/form-data' 
-        }
-      });
-
-      Alert.alert("Succès", "Contenu ajouté à la bibliothèque");
-      setTitle('');
-      setLink('');
-      setSelectedFile(null);
-      fetchLibrary();
-    } catch (error) {
-      Alert.alert("Erreur", "L'envoi a échoué. Vérifiez votre connexion.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const deleteItem = (id: string) => {
-    Alert.alert("Suppression", "Voulez-vous supprimer ce contenu ?", [
-      { text: "Annuler", style: "cancel" },
-      { text: "Supprimer", style: "destructive", onPress: async () => {
-          try {
-            const token = await AsyncStorage.getItem('userToken');
-            await axios.delete(`${API_URL}/library/${id}`, {
-              headers: { Authorization: `Bearer ${token}` }
-            });
-            fetchLibrary();
-          } catch (e) {
-            Alert.alert("Erreur", "Impossible de supprimer");
-          }
-      }}
-    ]);
-  };
+  const renderLivre = ({ item }: { item: any }) => (
+    <TouchableOpacity style={[styles.livreCard, { backgroundColor: item.color }]}>
+      <View style={styles.badge}>
+        <Text style={styles.badgeText}>{item.type}</Text>
+      </View>
+      <Ionicons name={item.icon} size={35} color="#fff" />
+      <View>
+        <Text style={styles.livreTitle}>{item.title}</Text>
+      </View>
+      <View style={styles.livreSpine} />
+    </TouchableOpacity>
+  );
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingTop: insets.top }]}>
+      <StatusBar barStyle="dark-content" />
+      
       <View style={styles.header}>
-        <Text style={styles.title}>Bibliothèque</Text>
-        <View style={styles.tabContainer}>
-          <TouchableOpacity 
-            style={[styles.tab, activeTab === 'books' && styles.activeTab]} 
-            onPress={() => setActiveTab('books')}
-          >
-            <Text style={[styles.tabText, activeTab === 'books' && styles.activeTabText]}>Livres PDF</Text>
-          </TouchableOpacity>
-          <TouchableOpacity 
-            style={[styles.tab, activeTab === 'videos' && styles.activeTab]} 
-            onPress={() => setActiveTab('videos')}
-          >
-            <Text style={[styles.tabText, activeTab === 'videos' && styles.activeTabText]}>Cours Vidéo</Text>
-          </TouchableOpacity>
+        <View>
+          <Text style={styles.headerSubtitle}>Espace Études</Text>
+          <Text style={styles.headerTitle}>Ma Bibliothèque</Text>
         </View>
+        <TouchableOpacity style={styles.searchBtn}>
+          <Ionicons name="search" size={24} color="#1e3a8a" />
+        </TouchableOpacity>
       </View>
 
-      <ScrollView contentContainerStyle={styles.formContainer} showsVerticalScrollIndicator={false}>
-        <View style={styles.card}>
-          <Text style={styles.label}>Titre du {activeTab === 'books' ? 'livre' : 'cours'}</Text>
-          <TextInput 
-            style={styles.input} 
-            placeholder="Ex: Mathématiques 2nde G" 
-            value={title}
-            onChangeText={setTitle}
-          />
-
-          {activeTab === 'books' ? (
-            <TouchableOpacity style={styles.filePicker} onPress={pickDocument}>
-              <Ionicons name="document-attach" size={24} color="#1e3a8a" />
-              <Text style={styles.filePickerText}>
-                {selectedFile ? selectedFile.name : "Sélectionner le PDF"}
-              </Text>
-            </TouchableOpacity>
-          ) : (
-            <>
-              <Text style={styles.label}>Lien de la vidéo (YouTube/Vimeo)</Text>
-              <TextInput 
-                style={styles.input} 
-                placeholder="https://youtube.com/watch?v=..." 
-                value={link}
-                onChangeText={setLink}
-              />
-            </>
-          )}
-
-          <TouchableOpacity style={styles.uploadBtn} onPress={handleUpload} disabled={loading}>
-            {loading ? <ActivityIndicator color="#fff" /> : (
-              <>
-                <Ionicons name="cloud-upload" size={20} color="#fff" />
-                <Text style={styles.uploadBtnText}>Publier maintenant</Text>
-              </>
-            )}
-          </TouchableOpacity>
-        </View>
-
-        <Text style={styles.sectionTitle}>Contenus publiés</Text>
-        {items.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <Ionicons name="library-outline" size={40} color="#cbd5e1" />
-            <Text style={styles.empty}>Aucun contenu pour le moment</Text>
-          </View>
-        ) : (
-          items.map((item, index) => (
-            <View key={item._id || index} style={styles.itemRow}>
-              <Ionicons name={activeTab === 'books' ? "document-text" : "play-circle"} size={24} color="#1e3a8a" />
-              <View style={{ flex: 1, marginLeft: 15 }}>
-                <Text style={styles.itemTitle} numberOfLines={1}>{item.title}</Text>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 100 }}>
+        {RAYONS_SCOLAIRES.map((rayon) => (
+          <View key={rayon.id} style={styles.rayonSection}>
+            <View style={styles.rayonHeader}>
+              <View>
+                <Text style={styles.classeTitle}>{rayon.classe}</Text>
+                <Text style={styles.matiereTitle}>{rayon.matiere}</Text>
               </View>
-              <TouchableOpacity onPress={() => deleteItem(item._id)}>
-                <Ionicons name="trash-outline" size={20} color="#dc2626" />
-              </TouchableOpacity>
+              <Ionicons name="chevron-forward" size={20} color="#94a3b8" />
             </View>
-          ))
-        )}
+            
+            <View style={styles.shelfContainer}>
+              <FlatList
+                data={rayon.livres}
+                renderItem={renderLivre}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.listPadding}
+              />
+              {/* Le support du rayon */}
+              <View style={styles.shelfBar} />
+            </View>
+          </View>
+        ))}
       </ScrollView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f8fafc' },
-  header: { padding: 25, paddingTop: 60, backgroundColor: '#fff', borderBottomLeftRadius: 30, borderBottomRightRadius: 30, elevation: 4 },
-  title: { fontSize: 24, fontWeight: 'bold', color: '#1e3a8a' },
-  tabContainer: { flexDirection: 'row', backgroundColor: '#f1f5f9', borderRadius: 15, marginTop: 20, padding: 5 },
-  tab: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 12 },
-  activeTab: { backgroundColor: '#fff', elevation: 2 },
-  tabText: { color: '#94a3b8', fontWeight: 'bold' },
-  activeTabText: { color: '#1e3a8a' },
-  formContainer: { padding: 20, paddingBottom: 100 },
-  card: { backgroundColor: '#fff', borderRadius: 20, padding: 20, elevation: 2, marginBottom: 30 },
-  label: { fontSize: 13, color: '#94a3b8', fontWeight: 'bold', marginBottom: 8, textTransform: 'uppercase' },
-  input: { backgroundColor: '#f8fafc', borderRadius: 12, padding: 15, fontSize: 16, marginBottom: 20, borderWidth: 1, borderColor: '#e2e8f0' },
-  filePicker: { flexDirection: 'row', alignItems: 'center', padding: 20, borderStyle: 'dashed', borderWidth: 2, borderColor: '#cbd5e1', borderRadius: 15, marginBottom: 20 },
-  filePickerText: { marginLeft: 15, color: '#64748b', fontSize: 14, flex: 1 },
-  uploadBtn: { backgroundColor: '#1e3a8a', flexDirection: 'row', justifyContent: 'center', alignItems: 'center', padding: 18, borderRadius: 15, elevation: 3 },
-  uploadBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 16, marginLeft: 10 },
-  sectionTitle: { fontSize: 18, fontWeight: 'bold', color: '#334155', marginBottom: 15 },
-  itemRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', padding: 15, borderRadius: 15, marginBottom: 10, elevation: 1 },
-  itemTitle: { color: '#334155', fontWeight: '500' },
-  emptyContainer: { alignItems: 'center', marginTop: 20 },
-  empty: { textAlign: 'center', color: '#94a3b8', marginTop: 10 }
+  container: { flex: 1, backgroundColor: '#fcfcfc' },
+  header: { 
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    alignItems: 'center', 
+    paddingHorizontal: 20,
+    paddingVertical: 15
+  },
+  headerSubtitle: { fontSize: 14, color: '#64748b', fontWeight: '500' },
+  headerTitle: { fontSize: 26, fontWeight: 'bold', color: '#1e3a8a' },
+  searchBtn: { backgroundColor: '#f1f5f9', padding: 10, borderRadius: 12 },
+
+  rayonSection: { marginTop: 20 },
+  rayonHeader: { 
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    alignItems: 'center', 
+    paddingHorizontal: 20,
+    marginBottom: 10 
+  },
+  classeTitle: { fontSize: 18, fontWeight: 'bold', color: '#1e293b' },
+  matiereTitle: { fontSize: 13, color: '#64748b' },
+
+  shelfContainer: { position: 'relative', paddingBottom: 15 },
+  listPadding: { paddingHorizontal: 20 },
+  livreCard: {
+    width: 120,
+    height: 165,
+    borderRadius: 10,
+    marginRight: 18,
+    padding: 12,
+    justifyContent: 'space-between',
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.2,
+    shadowRadius: 5,
+  },
+  badge: { 
+    backgroundColor: 'rgba(255,255,255,0.2)', 
+    alignSelf: 'flex-start', 
+    paddingHorizontal: 8, 
+    paddingVertical: 3, 
+    borderRadius: 5 
+  },
+  badgeText: { color: '#fff', fontSize: 10, fontWeight: 'bold' },
+  livreTitle: { color: '#fff', fontSize: 14, fontWeight: 'bold', lineHeight: 18 },
+  livreSpine: { 
+    position: 'absolute', 
+    left: 0, 
+    top: 10, 
+    bottom: 10, 
+    width: 4, 
+    backgroundColor: 'rgba(0,0,0,0.1)',
+    borderTopRightRadius: 2,
+    borderBottomRightRadius: 2
+  },
+  
+  shelfBar: {
+    height: 8,
+    backgroundColor: '#e2e8f0', 
+    marginHorizontal: 15,
+    borderRadius: 4,
+    marginTop: -5,
+    zIndex: -1,
+    borderBottomWidth: 2,
+    borderBottomColor: '#cbd5e1'
+  }
 });
